@@ -8,7 +8,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -22,7 +21,6 @@ type GroupResourceModel struct {
 	ID          types.String `tfsdk:"id"`
 	Name        types.String `tfsdk:"name"`
 	Description types.String `tfsdk:"description"`
-	GID         types.Int64  `tfsdk:"gid"`
 }
 
 var (
@@ -77,13 +75,6 @@ func (r *GroupResource) Schema(
 				MarkdownDescription: "A description of the group.",
 				Optional:            true,
 			},
-			"gid": schema.Int64Attribute{
-				MarkdownDescription: "DSM's numeric group id.",
-				Computed:            true,
-				PlanModifiers: []planmodifier.Int64{
-					int64planmodifier.UseStateForUnknown(),
-				},
-			},
 		},
 	}
 }
@@ -123,7 +114,6 @@ func (r *GroupResource) Create(
 	}
 
 	plan.ID = plan.Name
-	plan.GID = types.Int64Value(int64(group.ID))
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -155,7 +145,6 @@ func (r *GroupResource) Read(
 
 	state.ID = types.StringValue(group.Name)
 	state.Name = types.StringValue(group.Name)
-	state.GID = types.Int64Value(int64(group.ID))
 	if group.Description != "" || !state.Description.IsNull() {
 		state.Description = types.StringValue(group.Description)
 	}
@@ -188,7 +177,6 @@ func (r *GroupResource) Update(
 	}
 
 	plan.ID = plan.Name
-	plan.GID = state.GID
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 

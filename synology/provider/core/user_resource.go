@@ -15,7 +15,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/synology-community/go-synology"
+	"github.com/synology-community/go-synology/pkg/api"
 	"github.com/synology-community/go-synology/pkg/api/core"
+	"github.com/synology-community/go-synology/pkg/api/core/methods"
 )
 
 // UserResourceModel is the Terraform model for synology_core_user.
@@ -48,6 +50,76 @@ func NewUserResource() resource.Resource {
 
 type UserResource struct {
 	client core.Api
+	// raw is the base API client, for the user calls that need a password
+	// confirmation token (see confirmed).
+	raw api.Api
+}
+
+// DSM 7 refuses SYNO.Core.User create, set and delete with error 105 unless
+// the request carries a SynoConfirmPWToken from SYNO.Core.User.PasswordConfirm
+// (the "enter your password again" step in the UI). go-synology's request
+// types don't have the field, so these wrap them and add it.
+type userCreateConfirmed struct {
+	core.UserCreateRequest
+	SynoConfirmPWToken string `url:"SynoConfirmPWToken"`
+}
+
+type userModifyConfirmed struct {
+	core.UserModifyRequest
+	SynoConfirmPWToken string `url:"SynoConfirmPWToken"`
+}
+
+type userDeleteConfirmed struct {
+	core.UserDeleteRequest
+	SynoConfirmPWToken string `url:"SynoConfirmPWToken"`
+}
+
+// confirmToken asks DSM for a fresh password confirmation token for the
+// logged-in admin.
+func (r *UserResource) confirmToken(ctx context.Context) (string, error) {
+	res, err := r.client.PasswordConfirm(ctx, r.raw.Password())
+	if err != nil {
+		return "", fmt.Errorf("password confirmation: %w", err)
+	}
+	if res == nil || res.SynoConfirmPWToken == "" {
+		return "", fmt.Errorf("password confirmation returned no token")
+	}
+	return res.SynoConfirmPWToken, nil
+}
+
+func (r *UserResource) createUser(ctx context.Context, req core.UserCreateRequest) error {
+	token, err := r.confirmToken(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = api.Post[core.UserCreateResponse](r.raw, ctx, &userCreateConfirmed{
+		UserCreateRequest:  req,
+		SynoConfirmPWToken: token,
+	}, methods.UserCreate)
+	return err
+}
+
+func (r *UserResource) modifyUser(ctx context.Context, req core.UserModifyRequest) error {
+	token, err := r.confirmToken(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = api.Post[core.UserModifyResponse](r.raw, ctx, &userModifyConfirmed{
+		UserModifyRequest:  req,
+		SynoConfirmPWToken: token,
+	}, methods.UserModify)
+	return err
+}
+
+func (r *UserResource) deleteUser(ctx context.Context, name string) error {
+	token, err := r.confirmToken(ctx)
+	if err != nil {
+		return err
+	}
+	return api.PostVoid(r.raw, ctx, &userDeleteConfirmed{
+		UserDeleteRequest:  core.UserDeleteRequest{Name: name},
+		SynoConfirmPWToken: token,
+	}, methods.UserDelete)
 }
 
 // Metadata implements resource.Resource.
@@ -193,7 +265,7 @@ func (r *UserResource) Create(
 		return
 	}
 
-	_, err := r.client.UserCreate(ctx, core.UserCreateRequest{
+	err := r.createUser(ctx, core.UserCreateRequest{
 		Name:              plan.Name.ValueString(),
 		Password:          password.ValueString(),
 		Description:       plan.Description.ValueString(),
@@ -291,7 +363,7 @@ func (r *UserResource) Update(
 		modify.Password = password.ValueString()
 	}
 
-	if _, err := r.client.UserModify(ctx, modify); err != nil {
+	if err := r.modifyUser(ctx, modify); err != nil {
 		resp.Diagnostics.AddError("Failed to update user", err.Error())
 		return
 	}
@@ -313,7 +385,7 @@ func (r *UserResource) Delete(
 		return
 	}
 
-	err := r.client.UserDelete(ctx, core.UserDeleteRequest{Name: state.Name.ValueString()})
+	err := r.deleteUser(ctx, state.Name.ValueString())
 	if err != nil {
 		// Already gone counts as deleted.
 		if user, lerr := r.findUser(ctx, state.Name.ValueString()); lerr == nil && user == nil {
@@ -356,6 +428,7 @@ func (r *UserResource) Configure(
 		return
 	}
 	r.client = client.CoreAPI()
+	r.raw = client
 }
 
 // findUser returns the user with this name, or nil if there is none.

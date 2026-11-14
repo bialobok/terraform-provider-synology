@@ -31,7 +31,6 @@ resource "synology_core_group" "backup_writers" {
 
 ### Read-Only
 
-- `gid` (Number) DSM's numeric group id.
 - `id` (String) The group name (same as `name`).
 
 ## Import
