@@ -16,6 +16,8 @@ func Resources() []func() resource.Resource {
 		NewTaskResource,
 		NewEventResource,
 		NewUserResource,
+		NewGroupResource,
+		NewShareResource,
 	}
 }
 
