@@ -27,7 +27,11 @@ func TestUserSchema_PasswordIsWriteOnly(t *testing.T) {
 		t.Fatalf(`attribute "password_wo" is not a StringAttribute`)
 	}
 	if !attr.WriteOnly || !attr.Sensitive {
-		t.Errorf("password_wo WriteOnly=%v Sensitive=%v, want both true", attr.WriteOnly, attr.Sensitive)
+		t.Errorf(
+			"password_wo WriteOnly=%v Sensitive=%v, want both true",
+			attr.WriteOnly,
+			attr.Sensitive,
+		)
 	}
 	if attr.Computed {
 		t.Errorf("password_wo must not be Computed")

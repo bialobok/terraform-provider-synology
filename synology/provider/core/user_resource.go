@@ -99,8 +99,9 @@ func (r *UserResource) Schema(
 				WriteOnly: true,
 			},
 			"password_wo_version": schema.Int64Attribute{
-				MarkdownDescription: "Increase to send `password_wo` to DSM again (rotate the password).",
-				Optional:            true,
+				MarkdownDescription: "Increase to send `password_wo` to DSM again " +
+					"(rotate the password).",
+				Optional: true,
 			},
 			"description": schema.StringAttribute{
 				MarkdownDescription: "A description of the user.",
@@ -120,8 +121,8 @@ func (r *UserResource) Schema(
 				},
 			},
 			"cannot_change_password": schema.BoolAttribute{
-				MarkdownDescription: "Whether the user is prevented from changing their own password. " +
-					"Defaults to `true`, which suits service accounts managed here.",
+				MarkdownDescription: "Whether the user is prevented from changing their " +
+					"own password. Defaults to `true`, which suits service accounts managed here.",
 				Optional: true,
 				Computed: true,
 				Default:  booldefault.StaticBool(true),
@@ -322,7 +323,8 @@ func (r *UserResource) Delete(
 	}
 }
 
-// ImportState imports a user by name: terraform import synology_core_user.x backup
+// ImportState imports a user by name, for example
+// `terraform import synology_core_user.x backup`.
 func (r *UserResource) ImportState(
 	ctx context.Context,
 	req resource.ImportStateRequest,
@@ -346,7 +348,8 @@ func (r *UserResource) Configure(
 		resp.Diagnostics.AddError(
 			"Unexpected Resource Configure Type",
 			fmt.Sprintf(
-				"Expected synology.Api, got: %T. Please report this issue to the provider developers.",
+				"Expected synology.Api, got: %T. "+
+					"Please report this issue to the provider developers.",
 				req.ProviderData,
 			),
 		)
