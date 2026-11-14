@@ -42,6 +42,8 @@ resource "synology_core_user" "backup" {
 
 ### Optional
 
+> **NOTE**: [Write-only arguments](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments) are supported in Terraform 1.11 and later.
+
 - `cannot_change_password` (Boolean) Whether the user is prevented from changing their own password. Defaults to `true`, which suits service accounts managed here.
 - `description` (String) A description of the user.
 - `email` (String) The user's email address.
