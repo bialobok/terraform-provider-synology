@@ -510,8 +510,11 @@ func isValidSessionCacheMode(s string) bool {
 }
 
 func validateOtpSecret(s string) error {
-	if len(s) < 16 || len(s) > 32 {
-		return fmt.Errorf("invalid OTP secret length")
+	// 16 base32 chars is 80 bits, the RFC 4226 minimum. Some DSM versions
+	// issue longer secrets than 32 chars, so only the minimum is enforced
+	// (with a generous cap against pasting the wrong thing).
+	if n := len(s); n < 16 || n > 128 {
+		return fmt.Errorf("invalid OTP secret length: %d characters, want 16 to 128", n)
 	}
 	if !reBase32Chars.MatchString(s) {
 		return fmt.Errorf("invalid OTP secret format")
