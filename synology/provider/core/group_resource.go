@@ -54,7 +54,8 @@ func (r *GroupResource) Schema(
 ) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "A local DSM group. Add users to it with `synology_core_user`'s " +
-			"`groups`.",
+			"`groups`.\n\nDSM's group list doesn't return descriptions, so a description " +
+			"changed outside Terraform is not detected.",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -145,7 +146,9 @@ func (r *GroupResource) Read(
 
 	state.ID = types.StringValue(group.Name)
 	state.Name = types.StringValue(group.Name)
-	if group.Description != "" || !state.Description.IsNull() {
+	// GroupList doesn't return descriptions with its default fields, so an
+	// empty one means "not reported", not "cleared". Keep what's in state.
+	if group.Description != "" {
 		state.Description = types.StringValue(group.Description)
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)

@@ -3,11 +3,14 @@ page_title: "Core: synology_core_group"
 subcategory: "Core"
 description: |-
   A local DSM group. Add users to it with synology_core_user's groups.
+  DSM's group list doesn't return descriptions, so a description changed outside Terraform is not detected.
 ---
 
 # Core: Group (Resource)
 
 A local DSM group. Add users to it with `synology_core_user`'s `groups`.
+
+DSM's group list doesn't return descriptions, so a description changed outside Terraform is not detected.
 
 ## Example Usage
 
