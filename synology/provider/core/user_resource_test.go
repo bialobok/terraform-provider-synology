@@ -2,10 +2,12 @@ package core
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/synology-community/go-synology/pkg/api/core"
 )
 
@@ -38,7 +40,7 @@ func TestUserSchema_PasswordIsWriteOnly(t *testing.T) {
 	}
 }
 
-func TestUserSchema_ReplaceOnNameAndGroups(t *testing.T) {
+func TestUserSchema_ReplaceOnNameOnly(t *testing.T) {
 	t.Parallel()
 	s := userSchema(t)
 
@@ -46,9 +48,38 @@ func TestUserSchema_ReplaceOnNameAndGroups(t *testing.T) {
 	if !ok || !name.Required || len(name.PlanModifiers) == 0 {
 		t.Errorf(`"name" should be a required string with a replace plan modifier`)
 	}
+	// Group changes happen in place; replacing a user would delete it.
 	groups, ok := s.Attributes["groups"].(schema.SetAttribute)
-	if !ok || len(groups.PlanModifiers) == 0 {
-		t.Errorf(`"groups" should be a set with a replace plan modifier`)
+	if !ok || len(groups.PlanModifiers) != 0 {
+		t.Errorf(`"groups" should be a set without plan modifiers`)
+	}
+}
+
+func TestGroupDiff(t *testing.T) {
+	t.Parallel()
+	join, leave := groupDiff(
+		[]string{"users", "administrators", "old"},
+		[]string{"users", "new", "administrators"},
+	)
+	if strings.Join(join, ",") != "new" || strings.Join(leave, ",") != "old" {
+		t.Errorf("groupDiff: join=%v leave=%v, want [new] [old]", join, leave)
+	}
+	join, leave = groupDiff(nil, []string{"users"})
+	if len(join) != 1 || len(leave) != 0 {
+		t.Errorf("groupDiff from nothing: join=%v leave=%v", join, leave)
+	}
+}
+
+func TestReadString(t *testing.T) {
+	t.Parallel()
+	if got := readString(types.StringNull(), ""); !got.IsNull() {
+		t.Errorf("unset and empty in DSM should stay null, got %v", got)
+	}
+	if got := readString(types.StringValue("x"), ""); got.ValueString() != "" || got.IsNull() {
+		t.Errorf("cleared in DSM should read as \"\", got %v", got)
+	}
+	if got := readString(types.StringNull(), "set in DSM"); got.ValueString() != "set in DSM" {
+		t.Errorf("set in DSM should be read, got %v", got)
 	}
 }
 

@@ -4,7 +4,7 @@ subcategory: "Core"
 description: |-
   A local DSM user account.
   The password is a write-only argument (Terraform 1.11 or later): it is sent to DSM but never stored in state or plan. To change it, set a new password_wo and increase password_wo_version.
-  DSM's user list does not return group membership, description or email, so changes made to those outside Terraform are not detected.
+  Description, email, password settings and (when groups is set) group membership are read from DSM, so changes made outside Terraform show up in the plan. Importing an existing user doesn't touch its password: leave password_wo out.
 ---
 
 # Core: User (Resource)
@@ -13,7 +13,7 @@ A local DSM user account.
 
 The password is a write-only argument (Terraform 1.11 or later): it is sent to DSM but never stored in state or plan. To change it, set a new `password_wo` and increase `password_wo_version`.
 
-DSM's user list does not return group membership, description or email, so changes made to those outside Terraform are not detected.
+Description, email, password settings and (when `groups` is set) group membership are read from DSM, so changes made outside Terraform show up in the plan. Importing an existing user doesn't touch its password: leave `password_wo` out.
 
 ## Example Usage
 
@@ -47,7 +47,7 @@ resource "synology_core_user" "backup" {
 - `cannot_change_password` (Boolean) Whether the user is prevented from changing their own password. Defaults to `true`, which suits service accounts managed here.
 - `description` (String) A description of the user.
 - `email` (String) The user's email address.
-- `groups` (Set of String) Groups the user belongs to, for example `["users"]`. Changing it replaces the user, because DSM's modify call can't remove groups.
+- `groups` (Set of String) Groups the user belongs to, for example `["users"]`. When set, membership is read from DSM and changed in place (SYNO.Core.Group.Member). Leave it out to not manage groups at all.
 - `password_never_expire` (Boolean) Whether the password is exempt from DSM's expiry policy. Defaults to `true`.
 - `password_wo` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) The user's password. Write-only: never stored in state. Required when the user is created.
 - `password_wo_version` (Number) Increase to send `password_wo` to DSM again (rotate the password).
