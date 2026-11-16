@@ -70,6 +70,7 @@ require (
 	github.com/ebitengine/purego v0.10.1 // indirect
 	github.com/eiannone/keyboard v0.0.0-20220611211555-0d226195f203 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
+	github.com/flynn/noise v1.1.0 // indirect
 	github.com/fsnotify/fsevents v0.2.0 // indirect
 	github.com/fvbommel/sortorder v1.1.0 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
@@ -229,4 +230,4 @@ require (
 
 tool github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs
 
-replace github.com/synology-community/go-synology => github.com/TMAtwood/go-synology v0.1.12-fcg.5
+replace github.com/synology-community/go-synology => github.com/bialobok/go-synology v0.0.0-20261116150912-ae8740f73ce1
