@@ -277,6 +277,20 @@ func (r *UserResource) Create(
 		return
 	}
 
+	// DSM's create doesn't reliably apply the groups it's given (seen on DSM
+	// 7.3: the user landed in "users" only), so set membership explicitly.
+	if !plan.Groups.IsNull() && len(groups) > 0 {
+		have, err := userGroups(ctx, r.raw, r.client, plan.Name.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to read group membership", err.Error())
+			return
+		}
+		if err := setUserGroups(ctx, r.raw, plan.Name.ValueString(), have, groups); err != nil {
+			resp.Diagnostics.AddError("Failed to set group membership", err.Error())
+			return
+		}
+	}
+
 	plan.ID = plan.Name
 	plan.PasswordWO = types.StringNull()
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
