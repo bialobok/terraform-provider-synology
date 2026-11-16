@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -142,8 +141,9 @@ func (r *UserResource) Schema(
 			"The password is a write-only argument (Terraform 1.11 or later): it is sent to DSM " +
 			"but never stored in state or plan. To change it, set a new `password_wo` and " +
 			"increase `password_wo_version`.\n\n" +
-			"DSM's user list does not return group membership, description or email, so " +
-			"changes made to those outside Terraform are not detected.",
+			"Description, email, password settings and (when `groups` is set) group membership " +
+			"are read from DSM, so changes made outside Terraform show up in the plan. " +
+			"Importing an existing user doesn't touch its password: leave `password_wo` out.",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -185,12 +185,10 @@ func (r *UserResource) Schema(
 			},
 			"groups": schema.SetAttribute{
 				MarkdownDescription: "Groups the user belongs to, for example `[\"users\"]`. " +
-					"Changing it replaces the user, because DSM's modify call can't remove groups.",
+					"When set, membership is read from DSM and changed in place " +
+					"(SYNO.Core.Group.Member). Leave it out to not manage groups at all.",
 				ElementType: types.StringType,
 				Optional:    true,
-				PlanModifiers: []planmodifier.Set{
-					setplanmodifier.RequiresReplace(),
-				},
 			},
 			"cannot_change_password": schema.BoolAttribute{
 				MarkdownDescription: "Whether the user is prevented from changing their " +
@@ -301,11 +299,12 @@ func (r *UserResource) Read(
 		name = state.ID.ValueString()
 	}
 
-	user, err := r.findUser(ctx, name)
+	users, err := listUserDetails(ctx, r.raw)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to list users", err.Error())
 		return
 	}
+	user := findUserDetail(users, name)
 	if user == nil {
 		resp.State.RemoveResource(ctx)
 		return
@@ -313,15 +312,45 @@ func (r *UserResource) Read(
 
 	state.ID = types.StringValue(user.Name)
 	state.Name = types.StringValue(user.Name)
-	// The list call only returns the name and uid; keep the rest as planned.
-	if state.CannotChangePassword.IsNull() {
+	state.Description = readString(state.Description, user.Description)
+	state.Email = readString(state.Email, user.Email)
+	if user.CannotChgPasswd != nil {
+		state.CannotChangePassword = types.BoolValue(*user.CannotChgPasswd)
+	} else if state.CannotChangePassword.IsNull() {
 		state.CannotChangePassword = types.BoolValue(true)
 	}
-	if state.PasswordNeverExpire.IsNull() {
+	if user.PasswdNeverExpire != nil {
+		state.PasswordNeverExpire = types.BoolValue(*user.PasswdNeverExpire)
+	} else if state.PasswordNeverExpire.IsNull() {
 		state.PasswordNeverExpire = types.BoolValue(true)
 	}
+
+	// Groups are only managed when configured (state isn't null).
+	if !state.Groups.IsNull() {
+		groups, err := userGroups(ctx, r.raw, r.client, user.Name)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to read group membership", err.Error())
+			return
+		}
+		set, diags := types.SetValueFrom(ctx, types.StringType, groups)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		state.Groups = set
+	}
+
 	state.PasswordWO = types.StringNull()
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+}
+
+// readString maps DSM's value onto state: an empty value stays null when
+// it was never set, so an unset description doesn't show as a change.
+func readString(current types.String, dsm string) types.String {
+	if dsm == "" && current.IsNull() {
+		return current
+	}
+	return types.StringValue(dsm)
 }
 
 // Update implements resource.Resource.
@@ -366,6 +395,24 @@ func (r *UserResource) Update(
 	if err := r.modifyUser(ctx, modify); err != nil {
 		resp.Diagnostics.AddError("Failed to update user", err.Error())
 		return
+	}
+
+	if !plan.Groups.IsNull() && !plan.Groups.Equal(state.Groups) {
+		want := []string{}
+		resp.Diagnostics.Append(plan.Groups.ElementsAs(ctx, &want, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		// Diff against DSM, not state: state may predate an import.
+		have, err := userGroups(ctx, r.raw, r.client, state.Name.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to read group membership", err.Error())
+			return
+		}
+		if err := setUserGroups(ctx, r.raw, state.Name.ValueString(), have, want); err != nil {
+			resp.Diagnostics.AddError("Failed to change group membership", err.Error())
+			return
+		}
 	}
 
 	plan.ID = state.ID
